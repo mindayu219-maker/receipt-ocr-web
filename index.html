@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>경비정산 엑셀 변환기</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "맑은 고딕", "Malgun Gothic", -apple-system, sans-serif;
+      background: #f4f6fb;
+      color: #222;
+      min-height: 100vh;
+      padding: 48px 16px 80px;
+    }
+
+    .wrap { max-width: 800px; margin: 0 auto; }
+
+    h1 { font-size: 1.4rem; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
+    .sub { font-size: 0.85rem; color: #888; margin-bottom: 28px; }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.07);
+      margin-bottom: 16px;
+    }
+
+    /* 상단 입력 */
+    .top-row {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .top-row label { font-size: 0.875rem; color: #555; white-space: nowrap; }
+    .top-row input {
+      flex: 1; min-width: 180px; padding: 9px 14px;
+      border: 1px solid #ddd; border-radius: 8px;
+      font-size: 0.9rem; font-family: inherit; outline: none;
+    }
+    .top-row input:focus { border-color: #5c6bc0; }
+
+    /* 테이블 */
+    .table-wrap { overflow-x: auto; margin-top: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+
+    thead th {
+      background: #e8eaf6; padding: 10px 12px; text-align: center;
+      font-weight: 700; border: 1px solid #c5cae9; white-space: nowrap;
+    }
+    tbody td { padding: 5px 8px; border: 1px solid #e0e0e0; }
+    tbody tr:nth-child(even) { background: #fafbff; }
+
+    input.cell {
+      width: 100%; border: none; background: transparent;
+      font-size: 0.875rem; font-family: inherit;
+      padding: 3px 6px; outline: none; border-radius: 4px;
+    }
+    input.cell:focus { background: #eef0ff; outline: 1px solid #5c6bc0; }
+    input.cell.c { text-align: center; }
+    input.cell.r { text-align: right; }
+
+    tfoot td {
+      font-weight: 700; background: #f0f0f0;
+      border-top: 2px solid #bbb; padding: 9px 12px;
+    }
+    .tf-label { text-align: center; }
+    .tf-total { text-align: right; }
+
+    /* 버튼 */
+    .btn-row { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; align-items: center; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 9px 20px; border-radius: 8px; font-size: 0.875rem;
+      font-family: inherit; font-weight: 600; cursor: pointer; border: none;
+      transition: opacity .15s;
+    }
+    .btn:active { opacity: .75; }
+    .btn-add    { background: #e8eaf6; color: #3949ab; }
+    .btn-add:hover { background: #d8daf6; }
+    .btn-dl     { background: #2e7d32; color: #fff; }
+    .btn-dl:hover { background: #1b5e20; }
+    .btn-clear  { background: #f5f5f5; color: #888; font-size: 0.8rem; padding: 9px 14px; }
+    .btn-clear:hover { background: #ebebeb; }
+
+    .btn-del {
+      background: none; border: none; color: #e57373;
+      font-size: 1rem; cursor: pointer; padding: 2px 6px; line-height: 1;
+    }
+    .btn-del:hover { color: #c62828; }
+
+    .count { font-size: 0.8rem; color: #aaa; margin-left: auto; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📋 경비정산 엑셀 변환기</h1>
+  <p class="sub">항목을 입력하고 엑셀 다운로드 버튼을 누르세요.</p>
+
+  <div class="card">
+    <div class="top-row">
+      <label for="fname">파일명</label>
+      <input id="fname" value="4월_접대_주차_PJH" />
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:130px">일자</th>
+            <th>장소(사용처, 가맹점명)</th>
+            <th style="width:120px">금액(krw)</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+        <tfoot>
+          <tr>
+            <td class="tf-label" colspan="2">총합</td>
+            <td class="tf-total" id="total">0</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-add" onclick="addRow()">+ 행 추가</button>
+      <button class="btn btn-dl"  onclick="download()">⬇ 엑셀 다운로드</button>
+      <button class="btn btn-clear" onclick="clearAll()">전체 삭제</button>
+      <span class="count" id="count">0건</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const tbody = document.getElementById('tbody');
+
+  function addRow(date='', place='', amount='') {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input class="cell c" placeholder="2026-04-01" value="${esc(date)}" oninput="recalc()" /></td>
+      <td><input class="cell"   placeholder="가맹점명" value="${esc(place)}" /></td>
+      <td><input class="cell r" placeholder="0" type="number" value="${amount}" oninput="recalc()" /></td>
+      <td style="text-align:center">
+        <button class="btn-del" onclick="this.closest('tr').remove(); recalc()">✕</button>
+      </td>`;
+    tbody.appendChild(tr);
+    recalc();
+  }
+
+  function recalc() {
+    let sum = 0;
+    tbody.querySelectorAll('input[type=number]').forEach(i => sum += Number(i.value) || 0);
+    document.getElementById('total').textContent = sum.toLocaleString('ko-KR');
+    document.getElementById('count').textContent = tbody.rows.length + '건';
+  }
+
+  function clearAll() {
+    if (tbody.rows.length && confirm('모든 항목을 삭제할까요?')) {
+      tbody.innerHTML = ''; recalc();
+    }
+  }
+
+  function download() {
+    const fname = document.getElementById('fname').value.trim() || '경비정산';
+    const rows  = [];
+
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const inputs = tr.querySelectorAll('input');
+      rows.push({
+        date:   inputs[0].value.trim(),
+        place:  inputs[1].value.trim(),
+        amount: Number(inputs[2].value) || 0,
+      });
+    });
+
+    const wb = XLSX.utils.book_new();
+    const data = [
+      ['일자', '장소(사용처, 가맹점명)', '금액(krw)'],
+      ...rows.map(r => [r.date, r.place, r.amount]),
+      ['', '총합', rows.reduce((s, r) => s + r.amount, 0)],
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // 열 너비
+    ws['!cols'] = [{ wch: 14 }, { wch: 34 }, { wch: 13 }];
+
+    // 천 단위 숫자 서식
+    const fmt = '#,##0';
+    for (let i = 1; i < data.length; i++) {
+      const addr = XLSX.utils.encode_cell({ r: i, c: 2 });
+      if (ws[addr]) ws[addr].z = fmt;
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, fname.slice(0, 30));
+    XLSX.writeFile(wb, fname + '.xlsx');
+  }
+
+  // 기본 행 3개
+  addRow(); addRow(); addRow();
+</script>
+</body>
+</html>
