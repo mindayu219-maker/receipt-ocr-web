@@ -159,9 +159,7 @@
   }
 
   function clearAll() {
-    if (tbody.rows.length && confirm('모든 항목을 삭제할까요?')) {
-      tbody.innerHTML = ''; recalc();
-    }
+    tbody.innerHTML = ''; recalc();
   }
 
   function download() {
